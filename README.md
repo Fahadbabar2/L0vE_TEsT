@@ -1,39 +1,106 @@
-# 💘 Love Test — Backend
+---
+title: Love Test Backend
+emoji: 💘
+colorFrom: pink
+colorTo: red
+sdk: docker
+app_port: 7860
+pinned: false
+---
 
-A Node.js + Express backend for **Love Test**, a couple compatibility game.
+# 💘 Love Test — Backend API
 
-**Flow:**
-1. Girl answers 8 questions about herself → creates a session → gets a shareable link.
-2. She sends the link to the boy.
-3. Boy opens the link, answers the same 8 questions, guessing her answers.
-4. Backend compares them, calculates a Love % (`correct / 8`), and generates a love-themed chat narrative.
+A Node.js + Express backend powering **Love Test**, a romantic couple-compatibility game. This service handles the game logic: collecting each partner's answers, comparing them, scoring the match, and generating a Cupid-narrated love-chat reveal.
 
-Data is saved permanently to a JSON file on disk (`db/sessions.json`) — no external database server, no native compilation, works identically on Windows/Mac/Linux.
+**Live frontend:** [heart-script-glow.vercel.app](https://heart-script-glow.vercel.app/)
 
 ---
 
-## Setup
+## How the game works
+
+1. **She answers first.** The girl answers 8 personal questions about herself and their relationship. This creates a session and returns a unique link.
+2. **She shares the link.** She sends that link to her partner.
+3. **He guesses.** The boy opens the link and answers the same 8 questions — guessing what she said.
+4. **Cupid reveals the result.** The backend compares both sets of answers, calculates a Love % (`correct ÷ 8`), and generates a warm, romantic chat narrating what he got right, what he missed, and the final score.
+
+Data is persisted to a JSON file on disk (`db/sessions.json`) — no external database, no native compilation required. Runs identically on Windows, macOS, and Linux.
+
+---
+
+## Tech Stack
+
+| Layer | Choice |
+|---|---|
+| Runtime | Node.js 20 |
+| Framework | Express |
+| Storage | File-based JSON store (zero native dependencies) |
+| Frontend | Built separately in Loveable, hosted on Vercel |
+| Backend hosting | Docker container on Hugging Face Spaces |
+
+---
+
+## Project Structure
+
+```
+love-test-backend/
+├── Dockerfile                  # Container config for Hugging Face Spaces
+├── .dockerignore
+├── server.js                   # Express app entry point
+├── db/
+│   └── database.js             # JSON-file storage (sessions.json)
+├── data/
+│   └── questions.js            # The 8 questions (girl & boy phrasing)
+├── controllers/
+│   └── sessionController.js    # Request handling & business logic
+├── routes/
+│   └── sessionRoutes.js        # API route definitions
+└── utils/
+    └── loveEngine.js           # Answer matching, scoring, chat generation
+```
+
+---
+
+## Running Locally
 
 ```bash
-cd love-test-backend
+git clone https://github.com/Fahadbabar2/LoVE_TEsT.git
+cd LoVE_TEsT
 npm install
 cp .env.example .env
 npm start
 ```
 (On Windows Command Prompt, use `copy .env.example .env` instead of `cp`)
 
-Server runs at `http://localhost:5000`.
-
-For auto-reload during development:
+The server starts at `http://localhost:5000`. For auto-reload during development:
 ```bash
 npm run dev
 ```
 
 ---
 
+## Deployment (Hugging Face Spaces)
+
+This repo ships with a `Dockerfile` and Hugging Face metadata (the YAML block at the top of this file), so it deploys directly as a **Docker Space**.
+
+1. Push this repo to GitHub (already done ✅).
+2. Create a new Space at [huggingface.co/new-space](https://huggingface.co/new-space) with **SDK: Docker**.
+3. Add this repo as a git remote and push:
+   ```bash
+   git remote add space https://huggingface.co/spaces/YOUR_HF_USERNAME/love-test-backend
+   git push space main
+   ```
+4. Once the build finishes, the API is live at:
+   ```
+   https://YOUR_HF_USERNAME-love-test-backend.hf.space
+   ```
+
+> ⚠️ **Storage note:** Hugging Face Spaces rebuild the container on restarts/redeploys, which wipes `db/sessions.json`. This is fine for demos and testing, but for production use with real user data, swap the storage layer for a persistent database (e.g. MongoDB Atlas free tier or a hosted Postgres instance).
+
+---
+
 ## The 8 Questions
 
-| key | Girl is asked | Boy is asked |
+| Key | Girl is asked | Boy is asked |
 |---|---|---|
 | `favColor` | What is your favorite color? | What is her favorite color? |
 | `favFood` | What is your favorite food? | What is her favorite food? |
@@ -48,23 +115,20 @@ npm run dev
 
 ## API Reference
 
-Base URL: `http://localhost:5000/api`
+Base URL (local): `http://localhost:5000/api`
+Base URL (production): `https://YOUR_HF_USERNAME-love-test-backend.hf.space/api`
 
-### 1. Get questions for the girl
-```
-GET /questions/girl
-```
+### `GET /questions/girl`
+Returns the 8 questions phrased for the girl.
 
-### 2. Get questions for the boy
-```
-GET /questions/boy?girlName=Aisha
-```
+### `GET /questions/boy?girlName=Aisha`
+Returns the 8 questions phrased for the boy, personalized with her name.
 
-### 3. Create a session (girl submits her answers)
-```
-POST /sessions
-Content-Type: application/json
+### `POST /sessions`
+Girl submits her answers. Creates a new session.
 
+**Request**
+```json
 {
   "girlName": "Aisha",
   "boyName": "Ali",
@@ -80,22 +144,21 @@ Content-Type: application/json
   }
 }
 ```
+
 **Response**
 ```json
 { "sessionId": "uuid-here", "status": "waiting_for_boy" }
 ```
-👉 Build a link like `https://yourapp.com/boy?session=uuid-here` and let the girl share it (copy button / WhatsApp share).
+Build a shareable link like `https://heart-script-glow.vercel.app/boy?session=uuid-here` for the girl to send.
 
-### 4. Check session status
-```
-GET /sessions/:id
-```
+### `GET /sessions/:id`
+Checks the status of a session (`waiting_for_boy` or `completed`).
 
-### 5. Boy submits his guesses (triggers scoring)
-```
-POST /sessions/:id/boy-answers
-Content-Type: application/json
+### `POST /sessions/:id/boy-answers`
+Boy submits his guesses. Triggers scoring and generates the love chat.
 
+**Request**
+```json
 {
   "boyName": "Ali",
   "answers": {
@@ -110,7 +173,8 @@ Content-Type: application/json
   }
 }
 ```
-**Response** — full result, including the generated chat:
+
+**Response**
 ```json
 {
   "sessionId": "uuid-here",
@@ -122,23 +186,24 @@ Content-Type: application/json
     "correctCount": 6,
     "total": 8,
     "tier": "deeply_in_love",
-    "breakdown": [ { "id": 1, "key": "favColor", "label": "Favorite Color", "girlAnswer": "Pink", "boyAnswer": "Pink", "correct": true }, ... ],
+    "breakdown": [
+      { "id": 1, "key": "favColor", "label": "Favorite Color", "girlAnswer": "Pink", "boyAnswer": "Pink", "correct": true }
+    ],
     "chat": [
-      { "sender": "system", "text": "💌 Love Test Results for Ali & Aisha" },
-      { "sender": "cupid", "text": "Aww, this is really sweet. 💕" },
-      { "sender": "cupid", "text": "✅ Ali got \"Favorite Color\" right! ..." },
-      { "sender": "cupid", "text": "❌ For \"Favorite Food\", he guessed \"Karahi\" but Aisha actually said \"Biryani\". ..." },
-      { "sender": "cupid", "text": "📊 Final Score: 6/8 correct — that's a 75% Love Match!" }
+      { "sender": "system", "text": "💌 A Love Letter From Cupid — Ali & Aisha" },
+      { "sender": "cupid", "text": "Ohh, my arrow is glowing warm on this one. 💕 Let's see how well this heart was studied..." },
+      { "sender": "cupid", "text": "💘 Ali remembered — \"Favorite Color\" is \"Pink\". A heart that truly listens." },
+      { "sender": "cupid", "text": "💭 Ali guessed \"Karahi\" for \"Favorite Food\", but Aisha's heart actually said \"Biryani\". A little detail to fall in love with, next time." },
+      { "sender": "cupid", "text": "💗 The verdict is in: 6 out of 8 pieces of her heart, Ali carries with him — a 75% Love Match." },
+      { "sender": "cupid", "text": "This is what real attention looks like — a love that listens. Keep whispering these little details to each other. 💗🌹" }
     ]
   }
 }
 ```
-👉 Render `result.chat` as a chat bubble UI in Loveable — that's the "love themed chat" experience.
+Render `result.chat` as an animated chat-bubble reveal in the frontend — this is the emotional centerpiece of the app.
 
-### 6. Fetch result later (e.g. reload page)
-```
-GET /sessions/:id/result
-```
+### `GET /sessions/:id/result`
+Fetches a completed session's result again (e.g. on page reload).
 
 ---
 
@@ -146,36 +211,36 @@ GET /sessions/:id/result
 
 Answers are compared leniently, not with strict string equality:
 - Case, punctuation, and extra spacing are ignored.
-- If one answer contains the other (e.g. "Rooftop" vs "Rooftop at sunset"), it still counts as **correct**.
+- If one answer contains the other (e.g. "Rooftop" vs. "Rooftop at sunset"), it still counts as **correct**.
 
-Tweak `isMatch()` in `utils/loveEngine.js` for stricter or fuzzier matching.
+Adjust `isMatch()` in `utils/loveEngine.js` for stricter or fuzzier matching.
 
 ## Love % Tiers
-- 100% → `soulmates`
-- 75–99% → `deeply_in_love`
-- 50–74% → `good_connection`
-- 25–49% → `needs_more_talks`
-- 0–24% → `just_getting_started`
+
+| Percentage | Tier |
+|---|---|
+| 100% | `soulmates` |
+| 75–99% | `deeply_in_love` |
+| 50–74% | `good_connection` |
+| 25–49% | `needs_more_talks` |
+| 0–24% | `just_getting_started` |
+
+Each tier has its own set of romantic Cupid-narrated intro/outro lines in `utils/loveEngine.js`.
 
 ---
 
-## Connecting Your Loveable Frontend
+## Connecting the Frontend (Loveable → Vercel)
 
-1. Deploy this backend (Render, Railway, Fly.io all work fine) or run locally for testing.
-2. In Loveable, set an environment variable / config for the API base URL.
-3. CORS is already enabled for all origins (tighten in `server.js` for production if you want).
-4. Typical frontend flow:
-   - Screen 1: fetch `/questions/girl`, girl fills form → `POST /sessions` → get `sessionId` → show a shareable link `yourapp.com/boy?session=SESSION_ID`.
-   - Screen 2: boy opens link → fetch `/questions/boy?girlName=...` → fills form → `POST /sessions/:id/boy-answers`.
-   - Screen 3: show `result.chat` as an animated chat bubble reveal, then the big percentage number.
+1. In the Loveable project, set the API base URL to the deployed Hugging Face Space:
+   `https://YOUR_HF_USERNAME-love-test-backend.hf.space/api`
+2. CORS is enabled for all origins by default (tighten in `server.js` for production if needed).
+3. Typical flow:
+   - **Screen 1:** fetch `/questions/girl` → she fills the form → `POST /sessions` → get `sessionId` → show a shareable link.
+   - **Screen 2:** he opens the link → fetch `/questions/boy?girlName=...` → fills the form → `POST /sessions/:id/boy-answers`.
+   - **Screen 3:** render `result.chat` as an animated bubble reveal, then the final Love %.
 
-## Project Structure
-```
-love-test-backend/
-├── server.js                  # Express app entry point
-├── db/database.js             # JSON-file storage (sessions.json)
-├── data/questions.js          # The 8 questions (girl & boy phrasing)
-├── controllers/sessionController.js
-├── routes/sessionRoutes.js
-└── utils/loveEngine.js        # Matching, scoring, chat generation
-```
+---
+
+## License
+
+MIT — free to use and modify.
